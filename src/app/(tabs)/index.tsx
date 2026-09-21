@@ -1,30 +1,64 @@
-import { View } from "react-native";
+// src/app/(tabs)/index.tsx
 import { useState, useEffect } from "react";
-import WeatherCard from "../../components/weatherCard";
+import { View, Text, ActivityIndicator, Button } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+ 
 import SearchBox from "../../components/SearchBox";
-import RiwayatList from "../../components/RiwayatList";
+import WeatherCard from "../../components/weatherCard";
+import { useDebounce } from "../../hooks/use-debounce";
+import { cariKota } from "../../services/GeocodingService";
+import { HasilGeocoding } from "../../../types/geocoding";
  
 export default function HalamanUtama() {
-  const [kotaAktif, setKotaAktif] = useState("Pekalongan");
-  const [riwayat, setRiwayat] = useState<string[]>(["Pekalongan"]);
+  const [teksCari, setTeksCari] = useState("");
+  const [hasil, setHasil] = useState<HasilGeocoding[]>([]);
+  const [sedangMemuat, setSedangMemuat] = useState(false);
+  const [pesanError, setPesanError] = useState<string | null>(null);
  
-  // Penambahan useEffect sesuai modul
+  const teksTertunda = useDebounce(teksCari, 500);
+ 
   useEffect(() => {
-    console.log("Kota aktif berubah menjadi:", kotaAktif);
-  }, [kotaAktif]);
+    if (teksTertunda.trim().length === 0) {
+      setHasil([]);
+      setPesanError(null);
+      return;
+    }
+    ambilData(teksTertunda);
+  }, [teksTertunda]);
  
-  function handleCari(kota: string) {
-    setKotaAktif(kota);
-    if (!riwayat.includes(kota)) {
-      setRiwayat([...riwayat, kota]);
+  async function ambilData(nama: string) {
+    setSedangMemuat(true);
+    setPesanError(null);
+    try {
+      const data = await cariKota(nama);
+      setHasil(data);
+    } catch (err) {
+      setPesanError("Gagal mengambil data. Periksa koneksi internet Anda.");
+    } finally {
+      setSedangMemuat(false);
     }
   }
  
   return (
-    <View style={{ padding: 16, gap: 16 }}>
-      <SearchBox onCari={handleCari} />
-      <WeatherCard kota={kotaAktif} suhu={29} tingkatAQI="BAIK" />
-      <RiwayatList daftarKota={riwayat} />
-    </View>
+    <SafeAreaView style={{ flex: 1, padding: 16, gap: 16 }}>
+      <SearchBox onCari={setTeksCari} />
+ 
+      {sedangMemuat && <ActivityIndicator />}
+ 
+      {pesanError && (
+        <View>
+          <Text>{pesanError}</Text>
+          <Button title="Coba Lagi" onPress={() => ambilData(teksTertunda)} />
+        </View>
+      )}
+ 
+      {!sedangMemuat && !pesanError && teksTertunda.length > 0 && hasil.length === 0 && (
+        <Text>Kota tidak ditemukan</Text>
+      )}
+ 
+      {hasil.map((kota) => (
+        <WeatherCard key={kota.id} kota={kota.name} suhu={29} tingkatAQI="BAIK" />
+      ))}
+    </SafeAreaView>
   );
 }
